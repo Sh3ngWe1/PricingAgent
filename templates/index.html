@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>書籍定價分析系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .table-container {
+        margin-bottom: 20px;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #f4f4f4;
+      }
+
+      .editable {
+        background-color: #fff;
+        cursor: pointer;
+      }
+
+      .compare-price-btn {
+        background-color: #2196f3;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+
+      .profit-margin {
+        color: #4caf50;
+        font-weight: bold;
+      }
+
+      .markdown-content {
+        font-size: 0.9em;
+        line-height: 1.4;
+      }
+      .markdown-content h3 {
+        font-size: 1em;
+        margin: 0.5em 0;
+      }
+      .markdown-content ul {
+        margin: 0.3em 0;
+        padding-left: 1.5em;
+      }
+      .markdown-content p {
+        margin: 0.3em 0;
+      }
+
+      .markdown-content {
+        padding: 8px;
+        line-height: 1.4;
+      }
+
+      .markdown-content h1,
+      .markdown-content h2,
+      .markdown-content h3 {
+        margin: 8px 0;
+      }
+
+      .markdown-content ul,
+      .markdown-content ol {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+
+      .markdown-content.error {
+        color: red;
+      }
+
+      .upload-container {
+        margin: 20px;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+
+      button {
+        padding: 8px 16px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background-color: #45a049;
+      }
+
+      #filePreview {
+        padding: 10px;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+      }
+
+      /* 固定書名欄位寬度並自動換行 */
+      table td:first-child,
+      table th:first-child {
+        width: 250px; /* 固定寬度 */
+        max-width: 250px; /* 最大寬度 */
+        white-space: normal; /* 允許換行 */
+        word-wrap: break-word; /* 長單詞自動換行 */
+        word-break: break-all; /* 允許在任何字元間換行 */
+      }
+
+      /* 如果需要在滑鼠懸停時顯示完整書名 */
+      table td:first-child:hover {
+        overflow: visible;
+        white-space: normal;
+        word-break: break-all;
+        background-color: #fff; /* 確保完整文字可見 */
+        position: relative; /* 確保顯示在其他內容之上 */
+        z-index: 1; /* 確保顯示在其他內容之上 */
+      }
+    </style>
+  </head>
+  <body>
+    <h1 style="text-align: center">書籍定價分析系統</h1>
+
+    <!-- 上傳區塊 -->
+    <div style="margin-bottom: 20px; text-align: center">
+      <input
+        type="file"
+        id="fileInput"
+        accept=".csv, .xlsx, .xls"
+        style="display: none"
+        onchange="handleFileUpload(this)"
+      />
+      <button
+        onclick="document.getElementById('fileInput').click()"
+        style="
+          padding: 8px 15px;
+          background-color: #4caf50;
+          color: white;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+          margin-bottom: 15px;
+        "
+      >
+        上傳書籍清單
+      </button>
+    </div>
+
+    <!-- 輸入區塊 -->
+    <div style="margin-bottom: 20px; text-align: center">
+      <div style="margin-bottom: 10px">
+        <label for="shippingCost">運輸成本(NTD)：</label>
+        <input
+          type="number"
+          id="shippingCost"
+          placeholder="每本運費..."
+          style="width: 100px; margin-right: 20px"
+        />
+
+        <label for="platformCost">平台抽成：</label>
+        <input
+          type="number"
+          id="platformCost"
+          placeholder="抽成比例..."
+          style="width: 100px"
+        />
+        <span>%</span>
+      </div>
+
+      <input
+        type="text"
+        id="bookInput"
+        placeholder="請輸入書名..."
+        style="padding: 8px; width: 300px; margin-right: 10px"
+      />
+      <button
+        onclick="addBook()"
+        style="
+          padding: 8px 15px;
+          background-color: #2196f3;
+          color: white;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+        "
+      >
+        新增書籍
+      </button>
+    </div>
+
+    <div id="tableContainer" style="display: none" class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>書名</th>
+            <th>成本</th>
+            <th>預定售價</th>
+            <th>市場售價(排除二手書以及電子書)</th>
+            <th>AI建議售價</th>
+            <th>毛利率</th>
+            <th>額外成本</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="book-table-body">
+          <!-- 動態新增的內容會放在這裡 -->
+        </tbody>
+      </table>
+    </div>
+
+    <script>
+      // 計算毛利率的函數
+      function calculateProfitMargin(cost, price) {
+        return (((price - cost) / price) * 100).toFixed(1) + "%";
+      }
+
+      // 當頁面載入完成時執行
+      document.addEventListener("DOMContentLoaded", function () {
+        fetch("/api/products")
+          .then((response) => response.json())
+          .then((data) => {
+            const tableBody = document.getElementById("book-table-body");
+            tableBody.innerHTML = "";
+
+            data.forEach((book) => {
+              // 計算初始毛利率
+              const initialProfitMargin = calculateProfitMargin(
+                book.cost,
+                book.suggested_price
+              );
+
+              const row = `
+                <tr>
+                  <td>${book.product_name}</td>
+                  <td>${book.cost}</td>
+                  <td>${book.planned_price}</td>
+                  <td>${book.market_price}</td>
+                  <td>
+                    <input type="number"
+                           class="price-input"
+                           value="${book.suggested_price}"
+                           onchange="updatePriceAndMargin(this, ${book.cost})"
+                           style="width: 80px;">
+                  </td>
+                  <td class="profit-margin">${initialProfitMargin}</td>
+                  <td style="white-space: pre-line">運輸成本：${book.shipping_cost}元\n平台抽成：${book.platform_cost}%</td>
+                  <td>
+                    <button class="compare-price-btn" onclick="comparePrice(this)">跟價</button>
+                  </td>
+                </tr>
+              `;
+              tableBody.innerHTML += row;
+            });
+          })
+          .catch((error) => console.error("Error:", error));
+      });
+
+      // 當價格改變時更新毛利率
+      function updateProfitMargin(input, cost) {
+        const price = parseFloat(input.value);
+        const row = input.closest("tr");
+        const profitMarginCell = row.querySelector(".profit-margin");
+        profitMarginCell.textContent = calculateProfitMargin(cost, price);
+      }
+
+      function comparePrice(button) {
+        const row = button.closest("tr");
+        const plannedPriceCell = row.cells[2]; // 預定售價的欄位
+        const suggestedPriceInput = row.querySelector(".price-input"); // 建議售價的輸入框
+        const strategyCell = row.querySelector(".strategy-loading"); // 策略欄位
+        const bookName = strategyCell.dataset.bookName;
+        const cost = strategyCell.dataset.cost;
+        const marketPrice = strategyCell.dataset.marketPrice;
+
+        const newPrice = suggestedPriceInput.value;
+
+        // 呼叫後端 API 更新價格
+        fetch("/api/update-planned-price", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            product_name: bookName,
+            planned_price: parseFloat(newPrice),
+          }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              // 更新成功，更新 UI
+              plannedPriceCell.textContent = newPrice;
+              plannedPriceCell.style.backgroundColor = "#e8f5e9";
+              setTimeout(() => {
+                plannedPriceCell.style.backgroundColor = "";
+              }, 1000);
+
+              // 重新獲取行銷策略
+              strategyCell.innerHTML = "重新載入中...";
+
+              return fetch("/api/marketing-strategy", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  product_name: bookName,
+                  cost: parseFloat(cost),
+                  market_price: parseFloat(marketPrice),
+                  suggested_price: parseFloat(newPrice),
+                }),
+              });
+            } else {
+              throw new Error(data.error);
+            }
+          })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.error) {
+              strategyCell.innerHTML = `<span class="text-danger">錯誤: ${data.error}</span>`;
+            } else {
+              strategyCell.innerHTML = `<div class="markdown-content">${marked.parse(
+                data.strategy
+              )}</div>`;
+            }
+          })
+          .catch((error) => {
+            alert("更新失敗：" + error.message);
+          });
+      }
+
+      function updatePriceAndMargin(input, cost) {
+        const row = input.closest("tr");
+        const suggestedPrice = parseFloat(input.value);
+
+        // 更新毛利率
+        const profitMarginCell = row.querySelector(".profit-margin");
+        if (cost && suggestedPrice) {
+          profitMarginCell.textContent = calculateProfitMarginWithExtra(
+            cost,
+            suggestedPrice,
+            parseFloat(shippingCost),
+            parseFloat(platformCost)
+          );
+        }
+      }
+
+      function searchBook() {
+        const searchTerm = document
+          .getElementById("bookSearch")
+          .value.trim()
+          .toLowerCase();
+        const rows = document.querySelectorAll("#book-table-body tr");
+
+        rows.forEach((row) => {
+          const bookName = row
+            .querySelector("td:first-child")
+            .textContent.toLowerCase();
+          if (searchTerm === "" || bookName.includes(searchTerm)) {
+            row.style.display = "";
+          } else {
+            row.style.display = "none";
+          }
+        });
+      }
+
+      // 加入按 Enter 鍵也能搜尋的功能
+      document
+        .getElementById("bookSearch")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            searchBook();
+          }
+        });
+
+      // 新增書籍的函數
+      async function addBook() {
+        const bookName = document.getElementById("bookInput").value.trim();
+        if (!bookName) {
+          alert("請輸入書名");
+          return;
+        }
+
+        // 獲取額外成本資訊
+        const shippingCost = document.getElementById("shippingCost").value || 0;
+        const platformCost = document.getElementById("platformCost").value || 0;
+
+        try {
+          const response = await fetch("/api/book-info", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              product_name: bookName,
+              shipping_cost: parseFloat(shippingCost),
+              platform_cost: parseFloat(platformCost),
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!data.cost && !data.market_price) {
+            alert(`抱歉，目前沒有「${bookName}」的資料`);
+            return;
+          }
+
+          // 顯示表格
+          document.getElementById("tableContainer").style.display = "block";
+
+          // 格式化額外成本顯示
+          const extraCostText = `運輸成本：${shippingCost}元\n平台抽成：${platformCost}%`;
+
+          // 計算初始毛利率（包含額外成本）
+          const initialProfitMargin =
+            data.cost && data.suggested_price
+              ? calculateProfitMarginWithExtra(
+                  data.cost,
+                  data.suggested_price,
+                  parseFloat(shippingCost),
+                  parseFloat(platformCost)
+                )
+              : "-";
+
+          const tableBody = document.getElementById("book-table-body");
+          const newRow = `
+            <tr>
+              <td>${bookName}</td>
+              <td>${data.cost || "載入中..."}</td>
+              <td>${data.planned_price || "-"}</td>
+              <td style="white-space: pre-line">${
+                formatMarketPrice(data.market_price) || "載入中..."
+              }</td>
+              <td>
+                <input type="number" 
+                       class="price-input" 
+                       value="${data.suggested_price || ""}"
+                       onchange="updatePriceAndMargin(this, ${
+                         data.cost
+                       }, ${shippingCost}, ${platformCost})"
+                       style="width: 80px;">
+              </td>
+              <td class="profit-margin">${initialProfitMargin}</td>
+              <td style="white-space: pre-line">${extraCostText}</td>
+              <td>
+                <button class="compare-price-btn" onclick="comparePrice(this)">跟價</button>
+              </td>
+            </tr>
+          `;
+          tableBody.insertAdjacentHTML("beforeend", newRow);
+
+          // 清空輸入框
+          document.getElementById("bookInput").value = "";
+        } catch (error) {
+          alert("新增書籍失敗：" + error.message);
+        }
+      }
+
+      // 支援 Enter 鍵新增書籍
+      document
+        .getElementById("bookInput")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            addBook();
+          }
+        });
+
+      // 計算含額外成本的毛利率函數
+      function calculateProfitMarginWithExtra(
+        cost,
+        price,
+        shippingCost,
+        platformCost
+      ) {
+        const totalCost = parseFloat(cost) + parseFloat(shippingCost);
+        const platformFee =
+          (parseFloat(price) * parseFloat(platformCost)) / 100;
+        const finalProfit = parseFloat(price) - totalCost - platformFee;
+        return ((finalProfit / parseFloat(price)) * 100).toFixed(1) + "%";
+      }
+
+      async function handleFileUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const response = await fetch("/api/upload-files", {
+            method: "POST",
+            body: formData,
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.error || "上傳失敗");
+          }
+
+          if (result.error) {
+            throw new Error(result.error);
+          }
+
+          // 清空檔案輸入
+          input.value = "";
+
+          // 顯示成功訊息
+          alert(
+            `成功上傳檔案！發現 ${result.warning_list.length} 本需要注意的書籍`
+          );
+
+          // 只為需要警告的書籍呼叫 addBook 函數
+          if (result.warning_list && Array.isArray(result.warning_list)) {
+            for (const bookName of result.warning_list) {
+              // 將書名填入輸入框
+              document.getElementById("bookInput").value = bookName;
+              // 呼叫 addBook 函數
+              await addBook();
+            }
+          }
+        } catch (error) {
+          console.error("上傳錯誤:", error);
+          alert("上傳失敗：" + error.message);
+        }
+      }
+
+      function previewFile() {
+        const fileInput = document.getElementById("fileInput");
+        const filePreview = document.getElementById("filePreview");
+        const fileName = document.getElementById("fileName");
+
+        if (fileInput.files && fileInput.files[0]) {
+          fileName.textContent = fileInput.files[0].name;
+          filePreview.style.display = "block";
+        }
+      }
+
+      async function uploadFile() {
+        const fileInput = document.getElementById("fileInput");
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert("請先選擇檔案");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+          const response = await fetch("/api/upload-files", {
+            method: "POST",
+            body: formData,
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.error || "上傳失敗");
+          }
+
+          // 清空檔案輸入和預覽
+          fileInput.value = "";
+          document.getElementById("filePreview").style.display = "none";
+
+          // 顯示成功訊息
+          alert("檔案上傳成功！");
+        } catch (error) {
+          console.error("上傳錯誤:", error);
+          alert("上傳失敗：" + error.message);
+        }
+      }
+
+      async function updateSuggestedPrice(bookName, newPrice, rowElement) {
+        // 先將行銷策略欄位顯示為"重新載入中..."
+        const strategyCell = rowElement.querySelector(".marketing-strategy");
+        strategyCell.innerHTML = "重新載入中...";
+
+        try {
+          // 發送更新價格的請求
+          const response = await fetch("/api/update-price", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              book_name: bookName,
+              suggested_price: newPrice,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "更新失敗");
+          }
+
+          // 更新行銷策略
+          if (data.marketing_strategy) {
+            strategyCell.innerHTML = data.marketing_strategy;
+          }
+
+          // 更新其他相關欄位（如毛利率等）
+          if (data.profit_margin) {
+            rowElement.querySelector(
+              ".profit-margin"
+            ).textContent = `${data.profit_margin.toFixed(1)}%`;
+          }
+        } catch (error) {
+          console.error("更新失敗:", error);
+          strategyCell.innerHTML = "更新失敗，請重試";
+          alert("更新失敗：" + error.message);
+        }
+      }
+
+      // 在價格輸入框變更時呼叫此函數
+      function handlePriceChange(input, bookName) {
+        const newPrice = parseInt(input.value);
+        if (!isNaN(newPrice)) {
+          const rowElement = input.closest("tr"); // 獲取當前行元素
+          updateSuggestedPrice(bookName, newPrice, rowElement);
+        }
+      }
+
+      // 新增一個格式化市場價格的函數
+      function formatMarketPrice(marketPrice) {
+        if (!marketPrice) return "-";
+        if (typeof marketPrice === "object") {
+          // 將物件轉換成陣列，過濾掉空的 key，然後排序
+          const sortedPrices = Object.entries(marketPrice)
+            .filter(([store, price]) => store && store.trim() !== "") // 過濾掉空的 key
+            .sort((a, b) => parseFloat(a[1]) - parseFloat(b[1])) // 按價格排序（低到高）
+            .map(([store, price]) => `${store}: ${price}元`); // 加上「元」字
+
+          // 用換行符號連接
+          return sortedPrices.join("\n");
+        }
+        return String(marketPrice);
+      }
+    </script>
+  </body>
+</html>
